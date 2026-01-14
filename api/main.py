@@ -1,6 +1,6 @@
 import json
 import statistics
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -14,7 +14,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=False,  # 🚨 THIS IS THE KEY
+    allow_credentials=False,
 )
 
 # Load telemetry safely
@@ -35,6 +35,17 @@ def percentile(values, p):
 def root():
     return {"status": "ok"}
 
+# ✅ ADD THIS (CRITICAL FOR CORS PREFLIGHT)
+@app.options("/api")
+def options_api():
+    return Response(
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
 @app.post("/api")
 def check_latency(data: RequestBody):
     result = {}
@@ -43,7 +54,6 @@ def check_latency(data: RequestBody):
         records = [r for r in telemetry if r["region"] == region]
 
         if not records:
-            # REQUIRED: handle missing regions safely
             result[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
@@ -54,7 +64,6 @@ def check_latency(data: RequestBody):
 
         latencies = [r["latency_ms"] for r in records]
         uptimes = [r["uptime_pct"] for r in records]
-
 
         result[region] = {
             "avg_latency": statistics.mean(latencies),
