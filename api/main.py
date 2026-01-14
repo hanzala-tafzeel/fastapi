@@ -41,6 +41,16 @@ def check_latency(data: RequestBody):
     for region in data.regions:
         records = [r for r in telemetry if r["region"] == region]
 
+        if not records:
+            # REQUIRED: handle missing regions safely
+            result[region] = {
+                "avg_latency": 0,
+                "p95_latency": 0,
+                "avg_uptime": 0,
+                "breaches": 0
+            }
+            continue
+
         latencies = [r["latency_ms"] for r in records]
         uptimes = [r["uptime"] for r in records]
 
