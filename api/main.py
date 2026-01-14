@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-import numpy as np
+from pathlib import Path
 
 app = FastAPI()
 
@@ -16,20 +16,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load telemetry once
-with open("telemetry.json") as f:
+# Load telemetry safely
+BASE_DIR = Path(__file__).parent.parent
+with open(BASE_DIR / "telemetry.json") as f:
     telemetry = json.load(f)
 
 class RequestBody(BaseModel):
     regions: List[str]
     threshold_ms: int
 
+def percentile(values, p):
+    values = sorted(values)
+    k = int(len(values) * p / 100)
+    return values[min(k, len(values) - 1)]
 
 @app.get("/")
 def root():
     return {"status": "ok"}
-
-
 
 @app.post("/api")
 def check_latency(data: RequestBody):
@@ -43,9 +46,9 @@ def check_latency(data: RequestBody):
 
         result[region] = {
             "avg_latency": statistics.mean(latencies),
-            "p95_latency": float(np.percentile(latencies, 95)),
+            "p95_latency": percentile(latencies, 95),
             "avg_uptime": statistics.mean(uptimes),
-            "breaches": sum(1 for l in latencies if l > data.threshold_ms)
+            "breaches": sum(l > data.threshold_ms for l in latencies)
         }
 
     return result
