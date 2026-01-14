@@ -25,6 +25,12 @@ class RequestBody(BaseModel):
     threshold_ms: int
 
 
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+
+
 @app.post("/api")
 def check_latency(data: RequestBody):
     result = {}
