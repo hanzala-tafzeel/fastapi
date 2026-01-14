@@ -1,75 +1,57 @@
-import json
-import statistics
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+import pandas as pd
+import numpy as np
 from pathlib import Path
 
 app = FastAPI()
 
-# Enable CORS for POST from any origin
+# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=False,
+    expose_headers=["*"],
 )
 
-# Load telemetry safely
-BASE_DIR = Path(__file__).parent.parent
-with open(BASE_DIR / "telemetry.json") as f:
-    telemetry = json.load(f)
+# Load the dataset once when the app starts
+# The data file should be in the same directory as this script
+DATA_FILE = Path(__file__).parent / "latency-data.json"
+df = pd.read_json(DATA_FILE)
 
-class RequestBody(BaseModel):
-    regions: List[str]
-    threshold_ms: int
-
-def percentile(values, p):
-    values = sorted(values)
-    k = int(len(values) * p / 100)
-    return values[min(k, len(values) - 1)]
 
 @app.get("/")
-def root():
-    return {"status": "ok"}
+async def root():
+    return {"message": "Vercel Latency Analytics API is running."}
 
-# ✅ ADD THIS (CRITICAL FOR CORS PREFLIGHT)
-@app.options("/api")
-def options_api():
-    return Response(
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
 
-@app.post("/api")
-def check_latency(data: RequestBody):
-    result = {}
+@app.post("/api/")
+async def get_latency_stats(request: Request):
+    payload = await request.json()
+    regions_to_process = payload.get("regions", [])
+    threshold = payload.get("threshold_ms", 200)
 
-    for region in data.regions:
-        records = [r for r in telemetry if r["region"] == region]
+    results = []
 
-        if not records:
-            result[region] = {
-                "avg_latency": 0,
-                "p95_latency": 0,
-                "avg_uptime": 0,
-                "breaches": 0
-            }
-            continue
+    for region in regions_to_process:
+        region_df = df[df["region"] == region]
 
-        latencies = [r["latency_ms"] for r in records]
-        uptimes = [r["uptime_pct"] for r in records]
+        if not region_df.empty:
+            avg_latency = round(region_df["latency_ms"].mean(), 2)
+            p95_latency = round(np.percentile(region_df["latency_ms"], 95), 2)
+            avg_uptime = round(region_df["uptime_pct"].mean(), 3)
+            breaches = int(region_df[region_df["latency_ms"] > threshold].shape[0])
 
-        result[region] = {
-            "avg_latency": statistics.mean(latencies),
-            "p95_latency": percentile(latencies, 95),
-            "avg_uptime": statistics.mean(uptimes),
-            "breaches": sum(l > data.threshold_ms for l in latencies)
-        }
+            results.append(
+                {
+                    "region": region,
+                    "avg_latency": avg_latency,
+                    "p95_latency": p95_latency,
+                    "avg_uptime": avg_uptime,
+                    "breaches": breaches,
+                }
+            )
 
-    return result
+    return {"regions": results}
