@@ -52,7 +52,8 @@ def check_latency(data: RequestBody):
             continue
 
         latencies = [r["latency_ms"] for r in records]
-        uptimes = [r["uptime"] for r in records]
+        uptimes = [r["uptime_pct"] for r in records]
+
 
         result[region] = {
             "avg_latency": statistics.mean(latencies),
