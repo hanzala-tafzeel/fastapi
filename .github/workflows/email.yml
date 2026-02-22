@@ -1,0 +1,14 @@
+name: email-workflow
+
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 23f2004513@ds.study.iitm.ac.in
+        run: echo "Hello, world!"
